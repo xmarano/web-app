@@ -6,266 +6,327 @@
     
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Gravité">
-    <link rel="apple-touch-icon" href="https://img.icons8.com/fluency/192/nebula.png">
+    <meta name="apple-mobile-web-app-title" content="iStat_Term">
+    <link rel="apple-touch-icon" href="https://img.icons8.com/color/192/console.png">
 
-    <title>Gravity Flow</title>
+    <title>iStat Terminal</title>
 
     <style>
-        /* Reset et Style Cyberpunk/Minimaliste */
-        * { margin: 0; padding: 0; box-sizing: border-box; touch-action: none; }
-        
-        body {
-            background-color: #050505;
-            color: white;
-            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
-            overflow: hidden;
-            height: 100vh;
-            width: 100vw;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+        :root {
+            --bg: #050505;
+            --text: #a0a0a0;
+            --accent: #00ff41; /* Hacker Green */
+            --alert: #ff3333;
+            --panel: #111;
+            --border: #333;
         }
 
-        canvas {
+        @font-face {
+            font-family: 'Hack';
+            src: local('Menlo'), local('Monaco'), local('Courier New'), monospace;
+        }
+
+        * { box-sizing: border-box; touch-action: none; }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Hack', monospace;
+            font-size: 12px;
+            margin: 0;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            padding: env(safe-area-inset-top) 10px env(safe-area-inset-bottom) 10px;
+        }
+
+        /* Effet CRT (Scanlines) */
+        body::after {
+            content: " ";
+            display: block;
             position: absolute;
             top: 0;
             left: 0;
-            z-index: 1;
+            bottom: 0;
+            right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            z-index: 100;
+            background-size: 100% 2px, 3px 100%;
+            pointer-events: none;
         }
 
-        /* Overlay pour la permission iOS */
-        #overlay {
-            position: absolute;
-            z-index: 10;
-            text-align: center;
-            background: rgba(0,0,0,0.85);
-            width: 100%;
+        header {
+            display: flex;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 5px;
+            margin-bottom: 10px;
+            color: var(--accent);
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: auto auto 1fr;
+            gap: 8px;
             height: 100%;
+        }
+
+        .panel {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            padding: 8px;
             display: flex;
             flex-direction: column;
-            justify-content: center;
+        }
+
+        .full-width { grid-column: span 2; }
+
+        h2 {
+            margin: 0 0 5px 0;
+            font-size: 10px;
+            color: white;
+            background: #222;
+            padding: 2px 5px;
+            display: inline-block;
+            width: fit-content;
+        }
+
+        .data-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 2px;
+            white-space: pre;
+        }
+
+        .label { color: var(--text); }
+        .val { color: var(--accent); }
+        .val.changing { color: white; }
+
+        /* Barres de progression ASCII Style */
+        .bar-container {
+            background: #222;
+            height: 8px;
+            width: 100%;
+            margin-top: 2px;
+            position: relative;
+        }
+        .bar-fill {
+            background: var(--accent);
+            height: 100%;
+            width: 0%;
+            transition: width 0.1s linear;
+        }
+
+        #startOverlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.95);
+            z-index: 200;
+            display: flex;
+            flex-direction: column;
             align-items: center;
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            transition: opacity 0.5s;
-        }
-
-        h1 {
-            font-size: 2rem;
-            font-weight: 800;
-            background: linear-gradient(45deg, #00d2ff, #3a7bd5);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin-bottom: 10px;
-        }
-
-        p {
-            color: #aaa;
-            margin-bottom: 30px;
-            max-width: 80%;
-            line-height: 1.4;
+            justify-content: center;
+            text-align: center;
         }
 
         button {
-            background: white;
+            background: var(--accent);
             color: black;
             border: none;
-            padding: 16px 32px;
-            border-radius: 30px;
-            font-size: 18px;
-            font-weight: 600;
+            padding: 15px 30px;
+            font-family: 'Hack', monospace;
+            font-weight: bold;
+            font-size: 16px;
             cursor: pointer;
-            box-shadow: 0 10px 20px rgba(255,255,255,0.2);
-            transition: transform 0.1s;
+            margin-top: 20px;
+            box-shadow: 0 0 15px var(--accent);
         }
 
-        button:active { transform: scale(0.95); }
-        
-        #hint {
-            position: absolute;
-            bottom: 30px;
-            z-index: 5;
-            color: rgba(255,255,255,0.3);
-            font-size: 12px;
-            pointer-events: none;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-        }
+        .blinking { animation: blink 1s infinite; }
+        @keyframes blink { 50% { opacity: 0; } }
+
     </style>
 </head>
 <body>
 
-    <div id="overlay">
-        <h1>Gravity Flow</h1>
-        <p>Penche ton iPhone pour contrôler les particules.</p>
-        <button id="startBtn">Commencer l'expérience</button>
+    <div id="startOverlay">
+        <div style="color: var(--accent); font-size: 24px; margin-bottom: 10px;">
+            SYSTEM_HALTED
+        </div>
+        <div style="max-width: 80%;">
+            > INITIALIZING SENSORS...<br>
+            > WAITING FOR USER AUTH...
+        </div>
+        <button id="initBtn">MOUNT_SENSORS.EXE</button>
     </div>
 
-    <div id="hint" style="display:none;">Inclinez l'appareil • Touchez pour exploser</div>
+    <header>
+        <span>iSTAT_TERM v3.0</span>
+        <span id="clock">00:00:00</span>
+    </header>
 
-    <canvas id="canvas"></canvas>
+    <div class="grid">
+        
+        <div class="panel full-width">
+            <h2>DEVICE_INFO</h2>
+            <div class="data-row"><span class="label">PLATFORM:</span> <span class="val" id="platform">--</span></div>
+            <div class="data-row"><span class="label">CORES:</span> <span class="val" id="cores">--</span></div>
+            <div class="data-row"><span class="label">RES:</span> <span class="val" id="res">--</span></div>
+            <div class="data-row"><span class="label">TOUCH POINTS:</span> <span class="val" id="touches">0</span></div>
+        </div>
+
+        <div class="panel">
+            <h2>GYRO (DEG)</h2>
+            <div class="data-row"><span class="label">ALPHA(Z):</span> <span class="val" id="g-alpha">0</span></div>
+            <div class="bar-container"><div class="bar-fill" id="b-alpha"></div></div>
+            
+            <div class="data-row"><span class="label">BETA (X):</span> <span class="val" id="g-beta">0</span></div>
+            <div class="bar-container"><div class="bar-fill" id="b-beta"></div></div>
+
+            <div class="data-row"><span class="label">GAMMA(Y):</span> <span class="val" id="g-gamma">0</span></div>
+            <div class="bar-container"><div class="bar-fill" id="b-gamma"></div></div>
+        </div>
+
+        <div class="panel">
+            <h2>ACCEL (M/S²)</h2>
+            <div class="data-row"><span class="label">ACC_X:</span> <span class="val" id="a-x">0</span></div>
+            <div class="data-row"><span class="label">ACC_Y:</span> <span class="val" id="a-y">0</span></div>
+            <div class="data-row"><span class="label">ACC_Z:</span> <span class="val" id="a-z">0</span></div>
+            <div class="data-row"><span class="label">TOTAL:</span> <span class="val" id="a-total">0</span></div>
+            <div class="bar-container"><div class="bar-fill" id="b-accel"></div></div>
+        </div>
+
+        <div class="panel full-width" style="flex: 1;">
+            <h2>GEOLOCATION <span class="blinking">●</span></h2>
+            <div class="data-row"><span class="label">LATITUDE :</span> <span class="val" id="geo-lat">WAITING...</span></div>
+            <div class="data-row"><span class="label">LONGITUDE:</span> <span class="val" id="geo-lon">WAITING...</span></div>
+            <div class="data-row"><span class="label">ALTITUDE :</span> <span class="val" id="geo-alt">--</span></div>
+            <div class="data-row"><span class="label">SPEED    :</span> <span class="val" id="geo-spd">0 km/h</span></div>
+            <div class="data-row"><span class="label">HEADING  :</span> <span class="val" id="geo-head">--</span></div>
+            <br>
+            <div class="data-row"><span class="label">NETWORK  :</span> <span class="val" id="net-type">--</span></div>
+        </div>
+
+    </div>
 
     <script>
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
-        const overlay = document.getElementById('overlay');
-        const startBtn = document.getElementById('startBtn');
-        const hint = document.getElementById('hint');
+        const $ = id => document.getElementById(id);
 
-        let width, height;
-        let particles = [];
-        const particleCount = 400; // Nombre de particules
+        // --- CLOCK ---
+        setInterval(() => {
+            const now = new Date();
+            $('clock').innerText = now.toLocaleTimeString();
+        }, 1000);
+
+        // --- STATIC INFO ---
+        $('platform').innerText = navigator.platform;
+        $('cores').innerText = (navigator.hardwareConcurrency || '?') + " LOGICAL";
+        $('res').innerText = `${window.screen.width}x${window.screen.height} (${window.devicePixelRatio}x)`;
         
-        // Variables de gravité (contrôlées par le téléphone)
-        let gravityX = 0;
-        let gravityY = 0;
-
-        // Configuration de l'écran Retina
-        function resize() {
-            width = window.innerWidth;
-            height = window.innerHeight;
-            canvas.width = width * window.devicePixelRatio;
-            canvas.height = height * window.devicePixelRatio;
-            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
-        }
-        window.addEventListener('resize', resize);
-        resize();
-
-        // Classe Particule
-        class Particle {
-            constructor() {
-                this.reset();
-            }
-
-            reset() {
-                this.x = Math.random() * width;
-                this.y = Math.random() * height;
-                this.vx = (Math.random() - 0.5) * 2;
-                this.vy = (Math.random() - 0.5) * 2;
-                this.size = Math.random() * 3 + 1;
-                // Couleurs néon aléatoires
-                const colors = ['#00f260', '#0575E6', '#ff0099', '#493240', '#00d2ff'];
-                this.color = colors[Math.floor(Math.random() * colors.length)];
-            }
-
-            update() {
-                // Appliquer la gravité issue du gyroscope
-                this.vx += gravityX * 0.5; 
-                this.vy += gravityY * 0.5;
-
-                // Friction (résistance de l'air)
-                this.vx *= 0.98;
-                this.vy *= 0.98;
-
-                // Mouvement
-                this.x += this.vx;
-                this.y += this.vy;
-
-                // Rebond sur les bords (Murs élastiques)
-                if (this.x < 0) { this.x = 0; this.vx *= -0.7; }
-                if (this.x > width) { this.x = width; this.vx *= -0.7; }
-                if (this.y < 0) { this.y = 0; this.vy *= -0.7; }
-                if (this.y > height) { this.y = height; this.vy *= -0.7; }
-            }
-
-            draw() {
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-                ctx.fillStyle = this.color;
-                ctx.fill();
-                
-                // Effet de trainée lumineuse (Glow)
-                ctx.shadowBlur = 15;
-                ctx.shadowColor = this.color;
-            }
+        if (navigator.connection) {
+            $('net-type').innerText = navigator.connection.effectiveType.toUpperCase();
+        } else {
+            $('net-type').innerText = "UNKNOWN (IOS LIMIT)";
         }
 
-        // Création des particules
-        function initParticles() {
-            particles = [];
-            for (let i = 0; i < particleCount; i++) {
-                particles.push(new Particle());
-            }
-        }
-
-        // Boucle d'animation
-        function animate() {
-            // Astuce: On efface avec un peu de transparence pour créer des trainées
-            ctx.shadowBlur = 0;
-            ctx.fillStyle = 'rgba(5, 5, 5, 0.2)'; 
-            ctx.fillRect(0, 0, width, height);
-
-            // Mode de fusion pour rendre les couleurs vibrantes quand elles se superposent
-            ctx.globalCompositeOperation = 'lighter';
-
-            particles.forEach(p => {
-                p.update();
-                p.draw();
-            });
-
-            ctx.globalCompositeOperation = 'source-over';
-            requestAnimationFrame(animate);
-        }
-
-        // --- GESTION GYROSCOPE IOS 13+ ---
-        // Apple oblige l'utilisateur à cliquer pour autoriser l'accès aux capteurs
-        
-        function handleOrientation(event) {
-            // Gamma est l'inclinaison gauche/droite (-90 à 90)
-            // Beta est l'inclinaison avant/arrière (-180 à 180)
-            // On divise par 50 pour avoir une gravité douce
-            if (event.gamma !== null) gravityX = event.gamma / 30;
-            if (event.beta !== null) gravityY = event.beta / 30;
-        }
-
-        startBtn.addEventListener('click', async () => {
-            // Vérification spécifique iOS 13+
+        // --- INITIALISATION (Permission IOS) ---
+        $('initBtn').addEventListener('click', async () => {
+            
+            // 1. Demande Motion
             if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
                 try {
-                    const permissionState = await DeviceOrientationEvent.requestPermission();
-                    if (permissionState === 'granted') {
-                        window.addEventListener('deviceorientation', handleOrientation);
-                        startApp();
-                    } else {
-                        alert("Permission refusée. L'app ne pourra pas détecter l'inclinaison.");
-                    }
-                } catch (error) {
-                    console.error(error);
-                }
-            } else {
-                // Pour les appareils non-iOS 13+ ou Android
-                window.addEventListener('deviceorientation', handleOrientation);
-                startApp();
+                    const response = await DeviceOrientationEvent.requestPermission();
+                    if (response !== 'granted') alert('Motion Permission Denied');
+                } catch (e) { console.log(e); }
             }
+
+            // 2. Demande GPS
+            if (navigator.geolocation) {
+                navigator.geolocation.watchPosition(updateGeo, geoError, {
+                    enableHighAccuracy: true,
+                    maximumAge: 0
+                });
+            }
+
+            // 3. Lance les listeners
+            window.addEventListener('deviceorientation', updateGyro);
+            window.addEventListener('devicemotion', updateAccel);
+            window.addEventListener('touchstart', updateTouch);
+            window.addEventListener('touchmove', updateTouch);
+            window.addEventListener('touchend', updateTouch);
+
+            // 4. UI
+            $('startOverlay').style.display = 'none';
         });
 
-        function startApp() {
-            overlay.style.opacity = '0';
-            setTimeout(() => overlay.style.display = 'none', 500);
-            hint.style.display = 'block';
-            initParticles();
-            animate();
+        // --- GYROSCOPE ---
+        function updateGyro(e) {
+            const a = e.alpha ? e.alpha.toFixed(1) : 0;
+            const b = e.beta ? e.beta.toFixed(1) : 0;
+            const g = e.gamma ? e.gamma.toFixed(1) : 0;
+
+            $('g-alpha').innerText = a;
+            $('g-beta').innerText = b;
+            $('g-gamma').innerText = g;
+
+            // Barres visuelles (normalisées grossièrement)
+            $('b-alpha').style.width = (e.alpha / 360 * 100) + '%';
+            $('b-beta').style.width = (Math.abs(e.beta) / 180 * 100) + '%';
+            $('b-gamma').style.width = (Math.abs(e.gamma) / 90 * 100) + '%';
         }
 
-        // Interaction tactile (Explosion au toucher)
-        window.addEventListener('touchstart', (e) => {
-            const touchX = e.touches[0].clientX;
-            const touchY = e.touches[0].clientY;
+        // --- ACCELEROMETER ---
+        function updateAccel(e) {
+            const acc = e.accelerationIncludingGravity;
+            if(!acc) return;
+
+            const x = acc.x ? acc.x.toFixed(2) : 0;
+            const y = acc.y ? acc.y.toFixed(2) : 0;
+            const z = acc.z ? acc.z.toFixed(2) : 0;
             
-            particles.forEach(p => {
-                // Propulse les particules loin du doigt
-                const dx = p.x - touchX;
-                const dy = p.y - touchY;
-                const dist = Math.sqrt(dx*dx + dy*dy);
-                
-                if (dist < 150) {
-                    const force = (150 - dist) / 150;
-                    p.vx += (dx / dist) * force * 30;
-                    p.vy += (dy / dist) * force * 30;
-                }
-            });
-        });
+            // Calcul force totale G
+            const total = Math.sqrt(acc.x**2 + acc.y**2 + acc.z**2).toFixed(2);
+
+            $('a-x').innerText = x;
+            $('a-y').innerText = y;
+            $('a-z').innerText = z;
+            $('a-total').innerText = total + ' G';
+
+            // Barre réactive au mouvement (si > 10G c'est max)
+            const pct = Math.min((total / 20) * 100, 100);
+            $('b-accel').style.width = pct + '%';
+            $('b-accel').style.background = total > 15 ? 'red' : 'var(--accent)';
+        }
+
+        // --- GEOLOCATION ---
+        function updateGeo(pos) {
+            $('geo-lat').innerText = pos.coords.latitude.toFixed(5);
+            $('geo-lon').innerText = pos.coords.longitude.toFixed(5);
+            
+            const alt = pos.coords.altitude ? pos.coords.altitude.toFixed(1) + " m" : "N/A";
+            $('geo-alt').innerText = alt;
+
+            const spd = pos.coords.speed ? (pos.coords.speed * 3.6).toFixed(1) + " km/h" : "0 km/h";
+            $('geo-spd').innerText = spd;
+
+            const head = pos.coords.heading ? pos.coords.heading.toFixed(0) + "°" : "--";
+            $('geo-head').innerText = head;
+        }
+
+        function geoError(err) {
+            $('geo-lat').innerText = "ERR: " + err.code;
+        }
+
+        // --- TOUCH ---
+        function updateTouch(e) {
+            $('touches').innerText = e.touches.length;
+            // Couleur change si multi-touch
+            $('touches').style.color = e.touches.length > 1 ? '#ff00ff' : 'var(--accent)';
+        }
 
     </script>
 </body>
