@@ -6,18 +6,20 @@
     
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="iStat_Term">
-    <link rel="apple-touch-icon" href="https://img.icons8.com/color/192/console.png">
+    <meta name="apple-mobile-web-app-title" content="iStat_OPS">
+    <link rel="apple-touch-icon" href="https://img.icons8.com/nolan/192/satellite-sending-signal.png">
 
-    <title>iStat Terminal</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
+    <title>iStat OPS</title>
 
     <style>
         :root {
             --bg: #050505;
             --text: #a0a0a0;
-            --accent: #00ff41; /* Hacker Green */
-            --alert: #ff3333;
-            --panel: #111;
+            --accent: #00ff41; /* Vert Hacker */
+            --alert: #ff3333;  /* Rouge Alerte */
+            --panel: #0a0a0a;
             --border: #333;
         }
 
@@ -32,26 +34,23 @@
             background: var(--bg);
             color: var(--text);
             font-family: 'Hack', monospace;
-            font-size: 12px;
+            font-size: 11px;
             margin: 0;
             height: 100vh;
             overflow: hidden;
             display: flex;
             flex-direction: column;
-            padding: env(safe-area-inset-top) 10px env(safe-area-inset-bottom) 10px;
+            padding: env(safe-area-inset-top) 5px env(safe-area-inset-bottom) 5px;
         }
 
-        /* Effet CRT (Scanlines) */
+        /* Scanlines CRT */
         body::after {
             content: " ";
             display: block;
             position: absolute;
-            top: 0;
-            left: 0;
-            bottom: 0;
-            right: 0;
+            top: 0; left: 0; bottom: 0; right: 0;
             background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
-            z-index: 100;
+            z-index: 999;
             background-size: 100% 2px, 3px 100%;
             pointer-events: none;
         }
@@ -61,24 +60,24 @@
             justify-content: space-between;
             border-bottom: 1px solid var(--border);
             padding-bottom: 5px;
-            margin-bottom: 10px;
+            margin-bottom: 5px;
             color: var(--accent);
             font-weight: bold;
-            text-transform: uppercase;
         }
 
         .grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            grid-template-rows: auto auto 1fr;
-            gap: 8px;
+            grid-template-rows: auto auto 1fr; /* Le bas prend tout l'espace */
+            gap: 5px;
             height: 100%;
+            overflow: hidden;
         }
 
         .panel {
             background: var(--panel);
             border: 1px solid var(--border);
-            padding: 8px;
+            padding: 6px;
             display: flex;
             flex-direction: column;
         }
@@ -86,13 +85,13 @@
         .full-width { grid-column: span 2; }
 
         h2 {
-            margin: 0 0 5px 0;
-            font-size: 10px;
-            color: white;
-            background: #222;
-            padding: 2px 5px;
-            display: inline-block;
+            margin: 0 0 4px 0;
+            font-size: 9px;
+            color: #000;
+            background: var(--accent);
+            padding: 1px 4px;
             width: fit-content;
+            font-weight: 800;
         }
 
         .data-row {
@@ -100,232 +99,290 @@
             justify-content: space-between;
             margin-bottom: 2px;
             white-space: pre;
+            font-size: 10px;
         }
 
-        .label { color: var(--text); }
-        .val { color: var(--accent); }
-        .val.changing { color: white; }
+        .label { color: #666; }
+        .val { color: white; font-weight: bold;}
 
-        /* Barres de progression ASCII Style */
-        .bar-container {
-            background: #222;
-            height: 8px;
+        /* Barres */
+        .bar-bg {
+            background: #1a1a1a;
+            height: 6px;
             width: 100%;
-            margin-top: 2px;
+            margin-bottom: 4px;
             position: relative;
         }
         .bar-fill {
-            background: var(--accent);
             height: 100%;
             width: 0%;
-            transition: width 0.1s linear;
+            transition: width 0.1s linear, background-color 0.1s;
         }
 
+        /* Overlay de démarrage */
         #startOverlay {
             position: absolute;
             top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.95);
-            z-index: 200;
+            background: rgba(0,0,0,0.98);
+            z-index: 2000;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            text-align: center;
         }
-
         button {
             background: var(--accent);
-            color: black;
             border: none;
             padding: 15px 30px;
             font-family: 'Hack', monospace;
             font-weight: bold;
-            font-size: 16px;
-            cursor: pointer;
+            font-size: 14px;
             margin-top: 20px;
-            box-shadow: 0 0 15px var(--accent);
         }
 
-        .blinking { animation: blink 1s infinite; }
-        @keyframes blink { 50% { opacity: 0; } }
+        /* MAP STYLES */
+        #map-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            background: #000;
+            overflow: hidden;
+        }
+        
+        #map { 
+            width: 100%; 
+            height: 100%; 
+            /* C'est ici que la magie opère : Inversion des couleurs de la map */
+            filter: invert(100%) hue-rotate(180deg) grayscale(80%) contrast(1.5);
+        }
+        
+        /* Cible sur la map */
+        .crosshair {
+            position: absolute;
+            top: 50%; left: 50%;
+            width: 20px; height: 20px;
+            transform: translate(-50%, -50%);
+            border: 1px solid var(--accent);
+            border-radius: 50%;
+            z-index: 1000;
+            box-shadow: 0 0 10px var(--accent);
+        }
+        .crosshair::after {
+            content: ''; position: absolute; top: 9px; left: 4px; width: 10px; height: 1px; background: var(--accent);
+        }
+        .crosshair::before {
+            content: ''; position: absolute; left: 9px; top: 4px; width: 1px; height: 10px; background: var(--accent);
+        }
 
     </style>
 </head>
 <body>
 
     <div id="startOverlay">
-        <div style="color: var(--accent); font-size: 24px; margin-bottom: 10px;">
-            SYSTEM_HALTED
-        </div>
-        <div style="max-width: 80%;">
-            > INITIALIZING SENSORS...<br>
-            > WAITING FOR USER AUTH...
-        </div>
-        <button id="initBtn">MOUNT_SENSORS.EXE</button>
+        <div style="color: var(--accent); margin-bottom: 10px;">> SYSTEM_BOOT_SEQUENCE</div>
+        <button id="initBtn">INITIALIZE SENSORS</button>
     </div>
 
     <header>
-        <span>iSTAT_TERM v3.0</span>
-        <span id="clock">00:00:00</span>
+        <span>iSTAT_OPS v4.0</span>
+        <span id="clock">--:--:--</span>
     </header>
 
     <div class="grid">
         
-        <div class="panel full-width">
-            <h2>DEVICE_INFO</h2>
-            <div class="data-row"><span class="label">PLATFORM:</span> <span class="val" id="platform">--</span></div>
-            <div class="data-row"><span class="label">CORES:</span> <span class="val" id="cores">--</span></div>
-            <div class="data-row"><span class="label">RES:</span> <span class="val" id="res">--</span></div>
-            <div class="data-row"><span class="label">TOUCH POINTS:</span> <span class="val" id="touches">0</span></div>
-        </div>
-
         <div class="panel">
-            <h2>GYRO (DEG)</h2>
-            <div class="data-row"><span class="label">ALPHA(Z):</span> <span class="val" id="g-alpha">0</span></div>
-            <div class="bar-container"><div class="bar-fill" id="b-alpha"></div></div>
+            <h2>GYROSCOPE</h2>
             
-            <div class="data-row"><span class="label">BETA (X):</span> <span class="val" id="g-beta">0</span></div>
-            <div class="bar-container"><div class="bar-fill" id="b-beta"></div></div>
+            <div class="data-row"><span class="label">BETA (X-TILT)</span> <span class="val" id="val-beta">0</span></div>
+            <div class="bar-bg"><div class="bar-fill" id="bar-beta"></div></div>
 
-            <div class="data-row"><span class="label">GAMMA(Y):</span> <span class="val" id="g-gamma">0</span></div>
-            <div class="bar-container"><div class="bar-fill" id="b-gamma"></div></div>
+            <div class="data-row"><span class="label">GAMMA (Y-TILT)</span> <span class="val" id="val-gamma">0</span></div>
+            <div class="bar-bg"><div class="bar-fill" id="bar-gamma"></div></div>
+
+            <div class="data-row"><span class="label">ALPHA (COMPASS)</span> <span class="val" id="val-alpha">0</span></div>
+            <div class="bar-bg"><div class="bar-fill" id="bar-alpha" style="background: var(--accent);"></div></div>
         </div>
 
         <div class="panel">
-            <h2>ACCEL (M/S²)</h2>
-            <div class="data-row"><span class="label">ACC_X:</span> <span class="val" id="a-x">0</span></div>
-            <div class="data-row"><span class="label">ACC_Y:</span> <span class="val" id="a-y">0</span></div>
-            <div class="data-row"><span class="label">ACC_Z:</span> <span class="val" id="a-z">0</span></div>
-            <div class="data-row"><span class="label">TOTAL:</span> <span class="val" id="a-total">0</span></div>
-            <div class="bar-container"><div class="bar-fill" id="b-accel"></div></div>
+            <h2>G-FORCE METER</h2>
+            <div class="data-row" style="margin-top:10px;">
+                <span class="label">TOTAL LOAD:</span> 
+                <span class="val" id="val-g" style="font-size:16px;">1.00 G</span>
+            </div>
+            
+            <div class="bar-bg" style="height: 15px; margin-top:5px;">
+                <div class="bar-fill" id="bar-g" style="background: var(--accent);"></div>
+            </div>
+            
+            <div class="data-row" style="margin-top:5px; font-size:9px; color:#555;">
+                <span>0G</span><span style="color:var(--accent)">1G</span><span>2G (MAX)</span>
+            </div>
         </div>
 
-        <div class="panel full-width" style="flex: 1;">
-            <h2>GEOLOCATION <span class="blinking">●</span></h2>
-            <div class="data-row"><span class="label">LATITUDE :</span> <span class="val" id="geo-lat">WAITING...</span></div>
-            <div class="data-row"><span class="label">LONGITUDE:</span> <span class="val" id="geo-lon">WAITING...</span></div>
-            <div class="data-row"><span class="label">ALTITUDE :</span> <span class="val" id="geo-alt">--</span></div>
-            <div class="data-row"><span class="label">SPEED    :</span> <span class="val" id="geo-spd">0 km/h</span></div>
-            <div class="data-row"><span class="label">HEADING  :</span> <span class="val" id="geo-head">--</span></div>
-            <br>
-            <div class="data-row"><span class="label">NETWORK  :</span> <span class="val" id="net-type">--</span></div>
+        <div class="panel full-width">
+            <h2>DATA LINK</h2>
+            <div style="display:grid; grid-template-columns: 1fr 1fr;">
+                <div class="data-row"><span class="label">SPD:</span> <span class="val" id="geo-spd">0 km/h</span></div>
+                <div class="data-row"><span class="label">ALT:</span> <span class="val" id="geo-alt">--</span></div>
+                <div class="data-row"><span class="label">LAT:</span> <span class="val" id="geo-lat">--</span></div>
+                <div class="data-row"><span class="label">LON:</span> <span class="val" id="geo-lon">--</span></div>
+            </div>
+        </div>
+
+        <div class="panel full-width" style="padding:0; position:relative; border-color: var(--accent);">
+            <div id="map-container">
+                <div id="map"></div>
+                <div class="crosshair"></div>
+            </div>
+            <div style="position:absolute; bottom:5px; right:5px; background:black; color:var(--accent); padding:2px 5px; font-size:9px; z-index:1001;">
+                LIVE TRACKING // <span id="gps-status">OFFLINE</span>
+            </div>
         </div>
 
     </div>
 
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
         const $ = id => document.getElementById(id);
 
         // --- CLOCK ---
-        setInterval(() => {
-            const now = new Date();
-            $('clock').innerText = now.toLocaleTimeString();
-        }, 1000);
+        setInterval(() => $('clock').innerText = new Date().toLocaleTimeString(), 1000);
 
-        // --- STATIC INFO ---
-        $('platform').innerText = navigator.platform;
-        $('cores').innerText = (navigator.hardwareConcurrency || '?') + " LOGICAL";
-        $('res').innerText = `${window.screen.width}x${window.screen.height} (${window.devicePixelRatio}x)`;
-        
-        if (navigator.connection) {
-            $('net-type').innerText = navigator.connection.effectiveType.toUpperCase();
-        } else {
-            $('net-type').innerText = "UNKNOWN (IOS LIMIT)";
-        }
+        let map, marker;
+        let isMapInit = false;
 
-        // --- INITIALISATION (Permission IOS) ---
+        // --- INITIALISATION ---
         $('initBtn').addEventListener('click', async () => {
             
-            // 1. Demande Motion
+            // Permissions iOS
             if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-                try {
-                    const response = await DeviceOrientationEvent.requestPermission();
-                    if (response !== 'granted') alert('Motion Permission Denied');
-                } catch (e) { console.log(e); }
+                try { await DeviceOrientationEvent.requestPermission(); } catch (e) {}
             }
 
-            // 2. Demande GPS
+            // Démarrage Capteurs
+            window.addEventListener('deviceorientation', updateGyro);
+            window.addEventListener('devicemotion', updateAccel);
+
+            // Démarrage GPS
             if (navigator.geolocation) {
-                navigator.geolocation.watchPosition(updateGeo, geoError, {
+                // High Accuracy + Timeout court pour forcer la mise à jour
+                navigator.geolocation.watchPosition(updateGeo, null, {
                     enableHighAccuracy: true,
-                    maximumAge: 0
+                    maximumAge: 0,
+                    timeout: 5000
                 });
             }
 
-            // 3. Lance les listeners
-            window.addEventListener('deviceorientation', updateGyro);
-            window.addEventListener('devicemotion', updateAccel);
-            window.addEventListener('touchstart', updateTouch);
-            window.addEventListener('touchmove', updateTouch);
-            window.addEventListener('touchend', updateTouch);
+            // Init Map (Centrée temporairement sur Paris avant le fix GPS)
+            initMap(48.8566, 2.3522);
 
-            // 4. UI
             $('startOverlay').style.display = 'none';
         });
 
-        // --- GYROSCOPE ---
-        function updateGyro(e) {
-            const a = e.alpha ? e.alpha.toFixed(1) : 0;
-            const b = e.beta ? e.beta.toFixed(1) : 0;
-            const g = e.gamma ? e.gamma.toFixed(1) : 0;
+        // --- MAP LOGIC (LEAFLET) ---
+        function initMap(lat, lon) {
+            map = L.map('map', {
+                zoomControl: false,
+                dragging: false,
+                scrollWheelZoom: false,
+                doubleClickZoom: false,
+                touchZoom: false,
+                attributionControl: false
+            }).setView([lat, lon], 17); // Zoom 17 = très proche (~50-100m)
 
-            $('g-alpha').innerText = a;
-            $('g-beta').innerText = b;
-            $('g-gamma').innerText = g;
+            // Tuiles OpenStreetMap
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19
+            }).addTo(map);
 
-            // Barres visuelles (normalisées grossièrement)
-            $('b-alpha').style.width = (e.alpha / 360 * 100) + '%';
-            $('b-beta').style.width = (Math.abs(e.beta) / 180 * 100) + '%';
-            $('b-gamma').style.width = (Math.abs(e.gamma) / 90 * 100) + '%';
+            isMapInit = true;
         }
 
-        // --- ACCELEROMETER ---
+        // --- GYROSCOPE LOGIC ---
+        function updateGyro(e) {
+            const b = e.beta || 0;  // Avant/Arrière
+            const g = e.gamma || 0; // Gauche/Droite
+            const a = e.alpha || 0; // Boussole
+
+            $('val-beta').innerText = b.toFixed(0) + "°";
+            $('val-gamma').innerText = g.toFixed(0) + "°";
+            $('val-alpha').innerText = a.toFixed(0) + "°";
+
+            // Beta Bar
+            updateBar('bar-beta', b, 90); // Max ~90°
+            // Gamma Bar
+            updateBar('bar-gamma', g, 45); // Max ~45°
+            
+            // Alpha (Boussole) est toujours 0-360
+            $('bar-alpha').style.width = (a / 360 * 100) + '%';
+        }
+
+        function updateBar(elementId, value, maxVal) {
+            const el = $(elementId);
+            const pct = Math.min((Math.abs(value) / maxVal) * 100, 100);
+            
+            el.style.width = pct + '%';
+            
+            // Si négatif = Rouge, Si positif = Vert
+            if (value < 0) {
+                el.style.background = 'var(--alert)';
+            } else {
+                el.style.background = 'var(--accent)';
+            }
+        }
+
+        // --- ACCELEROMETER LOGIC (G-FORCE) ---
         function updateAccel(e) {
             const acc = e.accelerationIncludingGravity;
             if(!acc) return;
 
-            const x = acc.x ? acc.x.toFixed(2) : 0;
-            const y = acc.y ? acc.y.toFixed(2) : 0;
-            const z = acc.z ? acc.z.toFixed(2) : 0;
+            // Formule : Racine carré de (x² + y² + z²) / 9.81
+            // Cela convertit les m/s² en G
+            const totalG = Math.sqrt(acc.x**2 + acc.y**2 + acc.z**2) / 9.81;
+
+            $('val-g').innerText = totalG.toFixed(2) + " G";
+
+            // Bar Logic: 
+            // 0G = 0%
+            // 2G = 100%
+            // Normalement à l'arret on est à 1G (50%)
+            const pct = Math.min((totalG / 2.0) * 100, 100);
             
-            // Calcul force totale G
-            const total = Math.sqrt(acc.x**2 + acc.y**2 + acc.z**2).toFixed(2);
+            $('bar-g').style.width = pct + '%';
 
-            $('a-x').innerText = x;
-            $('a-y').innerText = y;
-            $('a-z').innerText = z;
-            $('a-total').innerText = total + ' G';
-
-            // Barre réactive au mouvement (si > 10G c'est max)
-            const pct = Math.min((total / 20) * 100, 100);
-            $('b-accel').style.width = pct + '%';
-            $('b-accel').style.background = total > 15 ? 'red' : 'var(--accent)';
+            // Change de couleur si ça tape fort (> 1.5G)
+            if (totalG > 1.5) {
+                $('bar-g').style.background = 'var(--alert)';
+                $('val-g').style.color = 'var(--alert)';
+            } else {
+                $('bar-g').style.background = 'var(--accent)';
+                $('val-g').style.color = 'white';
+            }
         }
 
-        // --- GEOLOCATION ---
+        // --- GEOLOCATION LOGIC ---
         function updateGeo(pos) {
-            $('geo-lat').innerText = pos.coords.latitude.toFixed(5);
-            $('geo-lon').innerText = pos.coords.longitude.toFixed(5);
+            const lat = pos.coords.latitude;
+            const lon = pos.coords.longitude;
+            const alt = pos.coords.altitude;
+            const spd = pos.coords.speed; // en m/s
+
+            $('geo-lat').innerText = lat.toFixed(5);
+            $('geo-lon').innerText = lon.toFixed(5);
+            $('geo-alt').innerText = alt ? Math.round(alt) + "m" : "N/A";
             
-            const alt = pos.coords.altitude ? pos.coords.altitude.toFixed(1) + " m" : "N/A";
-            $('geo-alt').innerText = alt;
+            // Conversion m/s -> km/h
+            const speedKmh = spd ? (spd * 3.6).toFixed(1) : "0.0";
+            $('geo-spd').innerText = speedKmh + " km/h";
+            
+            $('gps-status').innerText = "LOCKED";
+            $('gps-status').style.color = "var(--accent)";
 
-            const spd = pos.coords.speed ? (pos.coords.speed * 3.6).toFixed(1) + " km/h" : "0 km/h";
-            $('geo-spd').innerText = spd;
-
-            const head = pos.coords.heading ? pos.coords.heading.toFixed(0) + "°" : "--";
-            $('geo-head').innerText = head;
-        }
-
-        function geoError(err) {
-            $('geo-lat').innerText = "ERR: " + err.code;
-        }
-
-        // --- TOUCH ---
-        function updateTouch(e) {
-            $('touches').innerText = e.touches.length;
-            // Couleur change si multi-touch
-            $('touches').style.color = e.touches.length > 1 ? '#ff00ff' : 'var(--accent)';
+            // Update Map
+            if (isMapInit) {
+                map.panTo([lat, lon]); 
+                // Note: panTo est plus fluide que setView pour les petites updates
+            }
         }
 
     </script>
