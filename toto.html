@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Gravité">
+    <link rel="apple-touch-icon" href="https://img.icons8.com/fluency/192/nebula.png">
+
+    <title>Gravity Flow</title>
+
+    <style>
+        /* Reset et Style Cyberpunk/Minimaliste */
+        * { margin: 0; padding: 0; box-sizing: border-box; touch-action: none; }
+        
+        body {
+            background-color: #050505;
+            color: white;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        /* Overlay pour la permission iOS */
+        #overlay {
+            position: absolute;
+            z-index: 10;
+            text-align: center;
+            background: rgba(0,0,0,0.85);
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            transition: opacity 0.5s;
+        }
+
+        h1 {
+            font-size: 2rem;
+            font-weight: 800;
+            background: linear-gradient(45deg, #00d2ff, #3a7bd5);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+        }
+
+        p {
+            color: #aaa;
+            margin-bottom: 30px;
+            max-width: 80%;
+            line-height: 1.4;
+        }
+
+        button {
+            background: white;
+            color: black;
+            border: none;
+            padding: 16px 32px;
+            border-radius: 30px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 10px 20px rgba(255,255,255,0.2);
+            transition: transform 0.1s;
+        }
+
+        button:active { transform: scale(0.95); }
+        
+        #hint {
+            position: absolute;
+            bottom: 30px;
+            z-index: 5;
+            color: rgba(255,255,255,0.3);
+            font-size: 12px;
+            pointer-events: none;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="overlay">
+        <h1>Gravity Flow</h1>
+        <p>Penche ton iPhone pour contrôler les particules.</p>
+        <button id="startBtn">Commencer l'expérience</button>
+    </div>
+
+    <div id="hint" style="display:none;">Inclinez l'appareil • Touchez pour exploser</div>
+
+    <canvas id="canvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const overlay = document.getElementById('overlay');
+        const startBtn = document.getElementById('startBtn');
+        const hint = document.getElementById('hint');
+
+        let width, height;
+        let particles = [];
+        const particleCount = 400; // Nombre de particules
+        
+        // Variables de gravité (contrôlées par le téléphone)
+        let gravityX = 0;
+        let gravityY = 0;
+
+        // Configuration de l'écran Retina
+        function resize() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width * window.devicePixelRatio;
+            canvas.height = height * window.devicePixelRatio;
+            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // Classe Particule
+        class Particle {
+            constructor() {
+                this.reset();
+            }
+
+            reset() {
+                this.x = Math.random() * width;
+                this.y = Math.random() * height;
+                this.vx = (Math.random() - 0.5) * 2;
+                this.vy = (Math.random() - 0.5) * 2;
+                this.size = Math.random() * 3 + 1;
+                // Couleurs néon aléatoires
+                const colors = ['#00f260', '#0575E6', '#ff0099', '#493240', '#00d2ff'];
+                this.color = colors[Math.floor(Math.random() * colors.length)];
+            }
+
+            update() {
+                // Appliquer la gravité issue du gyroscope
+                this.vx += gravityX * 0.5; 
+                this.vy += gravityY * 0.5;
+
+                // Friction (résistance de l'air)
+                this.vx *= 0.98;
+                this.vy *= 0.98;
+
+                // Mouvement
+                this.x += this.vx;
+                this.y += this.vy;
+
+                // Rebond sur les bords (Murs élastiques)
+                if (this.x < 0) { this.x = 0; this.vx *= -0.7; }
+                if (this.x > width) { this.x = width; this.vx *= -0.7; }
+                if (this.y < 0) { this.y = 0; this.vy *= -0.7; }
+                if (this.y > height) { this.y = height; this.vy *= -0.7; }
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+                
+                // Effet de trainée lumineuse (Glow)
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = this.color;
+            }
+        }
+
+        // Création des particules
+        function initParticles() {
+            particles = [];
+            for (let i = 0; i < particleCount; i++) {
+                particles.push(new Particle());
+            }
+        }
+
+        // Boucle d'animation
+        function animate() {
+            // Astuce: On efface avec un peu de transparence pour créer des trainées
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = 'rgba(5, 5, 5, 0.2)'; 
+            ctx.fillRect(0, 0, width, height);
+
+            // Mode de fusion pour rendre les couleurs vibrantes quand elles se superposent
+            ctx.globalCompositeOperation = 'lighter';
+
+            particles.forEach(p => {
+                p.update();
+                p.draw();
+            });
+
+            ctx.globalCompositeOperation = 'source-over';
+            requestAnimationFrame(animate);
+        }
+
+        // --- GESTION GYROSCOPE IOS 13+ ---
+        // Apple oblige l'utilisateur à cliquer pour autoriser l'accès aux capteurs
+        
+        function handleOrientation(event) {
+            // Gamma est l'inclinaison gauche/droite (-90 à 90)
+            // Beta est l'inclinaison avant/arrière (-180 à 180)
+            // On divise par 50 pour avoir une gravité douce
+            if (event.gamma !== null) gravityX = event.gamma / 30;
+            if (event.beta !== null) gravityY = event.beta / 30;
+        }
+
+        startBtn.addEventListener('click', async () => {
+            // Vérification spécifique iOS 13+
+            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                try {
+                    const permissionState = await DeviceOrientationEvent.requestPermission();
+                    if (permissionState === 'granted') {
+                        window.addEventListener('deviceorientation', handleOrientation);
+                        startApp();
+                    } else {
+                        alert("Permission refusée. L'app ne pourra pas détecter l'inclinaison.");
+                    }
+                } catch (error) {
+                    console.error(error);
+                }
+            } else {
+                // Pour les appareils non-iOS 13+ ou Android
+                window.addEventListener('deviceorientation', handleOrientation);
+                startApp();
+            }
+        });
+
+        function startApp() {
+            overlay.style.opacity = '0';
+            setTimeout(() => overlay.style.display = 'none', 500);
+            hint.style.display = 'block';
+            initParticles();
+            animate();
+        }
+
+        // Interaction tactile (Explosion au toucher)
+        window.addEventListener('touchstart', (e) => {
+            const touchX = e.touches[0].clientX;
+            const touchY = e.touches[0].clientY;
+            
+            particles.forEach(p => {
+                // Propulse les particules loin du doigt
+                const dx = p.x - touchX;
+                const dy = p.y - touchY;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                
+                if (dist < 150) {
+                    const force = (150 - dist) / 150;
+                    p.vx += (dx / dist) * force * 30;
+                    p.vy += (dy / dist) * force * 30;
+                }
+            });
+        });
+
+    </script>
+</body>
+</html>
